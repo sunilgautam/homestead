@@ -13,10 +13,10 @@ class Homestead
         config.ssh.forward_agent = true
 
         # Configure The Box
-        config.vm.define settings["name"] ||= "homestead-7"
-        config.vm.box = settings["box"] ||= "laravel/homestead"
-        config.vm.box_version = settings["version"] ||= ">= 2.0.0"
-        config.vm.hostname = settings["hostname"] ||= "homestead"
+        config.vm.define settings["name"] ||= "ubuntu-trusty64"
+        config.vm.box = settings["box"] ||= "ubuntu/trusty64"
+        # config.vm.box_version = settings["version"] ||= ">= 2.0.0"
+        config.vm.hostname = settings["hostname"] ||= "ubuntu-trusty64"
 
         # Configure A Private Network IP
         config.vm.network :private_network, ip: settings["ip"] ||= "192.168.10.10"
@@ -30,7 +30,7 @@ class Homestead
 
         # Configure A Few VirtualBox Settings
         config.vm.provider "virtualbox" do |vb|
-            vb.name = settings["name"] ||= "homestead-7"
+            vb.name = settings["name"] ||= "ubuntu-trusty64"
             vb.customize ["modifyvm", :id, "--memory", settings["memory"] ||= "2048"]
             vb.customize ["modifyvm", :id, "--cpus", settings["cpus"] ||= "1"]
             vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
@@ -44,7 +44,7 @@ class Homestead
         # Configure A Few VMware Settings
         ["vmware_fusion", "vmware_workstation"].each do |vmware|
             config.vm.provider vmware do |v|
-                v.vmx["displayName"] = settings["name"] ||= "homestead-7"
+                v.vmx["displayName"] = settings["name"] ||= "ubuntu-trusty64"
                 v.vmx["memsize"] = settings["memory"] ||= 2048
                 v.vmx["numvcpus"] = settings["cpus"] ||= 1
                 v.vmx["guestOS"] = "ubuntu-64"
@@ -56,7 +56,7 @@ class Homestead
 
         # Configure A Few Parallels Settings
         config.vm.provider "parallels" do |v|
-            v.name = settings["name"] ||= "homestead-7"
+            v.name = settings["name"] ||= "ubuntu-trusty64"
             v.update_guest_tools = settings["update_parallels_tools"] ||= false
             v.memory = settings["memory"] ||= 2048
             v.cpus = settings["cpus"] ||= 1
@@ -162,128 +162,41 @@ class Homestead
             end
         end
 
-        # Install All The Configured Nginx Sites
+        # Configure initial steps
         config.vm.provision "shell" do |s|
-            s.path = scriptDir + "/clear-nginx.sh"
+            s.name = "Initial steps"
+            s.path = scriptDir + "/initial-steps.sh"
         end
 
-        if settings.include? 'sites'
-            settings["sites"].each do |site|
-                type = site["type"] ||= "laravel"
-
-                if (type == "symfony")
-                    type = "symfony2"
-                end
-
-                config.vm.provision "shell" do |s|
-                    s.name = "Creating Site: " + site["map"]
-                    s.path = scriptDir + "/serve-#{type}.sh"
-                    s.args = [site["map"], site["to"], site["port"] ||= "80", site["ssl"] ||= "443"]
-                end
-
-                # Configure The Cron Schedule
-                if (site.has_key?("schedule"))
-                    config.vm.provision "shell" do |s|
-                        s.name = "Creating Schedule"
-
-                        if (site["schedule"])
-                            s.path = scriptDir + "/cron-schedule.sh"
-                            s.args = [site["map"].tr('^A-Za-z0-9', ''), site["to"]]
-                        else
-                            s.inline = "rm -f /etc/cron.d/$1"
-                            s.args = [site["map"].tr('^A-Za-z0-9', '')]
-                        end
-                    end
-                end
-            end
-        end
-
+        # Nodejs
         config.vm.provision "shell" do |s|
-            s.name = "Restarting Nginx"
-            s.inline = "sudo service nginx restart; sudo service php7.1-fpm restart"
+            s.path = scriptDir + "/install-nodejs.sh"
         end
 
-        # Install MariaDB If Necessary
-        if settings.has_key?("mariadb") && settings["mariadb"]
-            config.vm.provision "shell" do |s|
-                s.path = scriptDir + "/install-maria.sh"
-            end
-        end
-
-        # Install MongoDB If Necessary
-        if settings.has_key?("mongodb") && settings["mongodb"]
-            config.vm.provision "shell" do |s|
-                s.path = scriptDir + "/install-mongo.sh"
-            end
-        end
-
-        # Configure All Of The Configured Databases
-        if settings.has_key?("databases")
-            settings["databases"].each do |db|
-                config.vm.provision "shell" do |s|
-                    s.name = "Creating MySQL Database: " + db
-                    s.path = scriptDir + "/create-mysql.sh"
-                    s.args = [db]
-                end
-
-                config.vm.provision "shell" do |s|
-                    s.name = "Creating Postgres Database: " + db
-                    s.path = scriptDir + "/create-postgres.sh"
-                    s.args = [db]
-                end
-
-                if settings.has_key?("mongodb") && settings["mongodb"]
-                    config.vm.provision "shell" do |s|
-                        s.name = "Creating Mongo Database: " + db
-                        s.path = scriptDir + "/create-mongo.sh"
-                        s.args = [db]
-                    end
-                end
-            end
-        end
-
-        # Configure All Of The Server Environment Variables
+        # npm packages
         config.vm.provision "shell" do |s|
-            s.name = "Clear Variables"
-            s.path = scriptDir + "/clear-variables.sh"
+            s.name = "Installing npm global packages"
+            s.path = scriptDir + "/install-npm-packages.sh"
         end
 
-        if settings.has_key?("variables")
-            settings["variables"].each do |var|
-                config.vm.provision "shell" do |s|
-                    s.inline = "echo \"\nenv[$1] = '$2'\" >> /etc/php/7.1/fpm/php-fpm.conf"
-                    s.args = [var["key"], var["value"]]
-                end
-
-                config.vm.provision "shell" do |s|
-                    s.inline = "echo \"\n# Set Homestead Environment Variable\nexport $1=$2\" >> /home/vagrant/.profile"
-                    s.args = [var["key"], var["value"]]
-                end
-            end
-
-            config.vm.provision "shell" do |s|
-                s.inline = "service php7.1-fpm restart"
-            end
-        end
-
-        # Update Composer On Every Provision
+        # MongoDB
         config.vm.provision "shell" do |s|
-            s.name = "Update Composer"
-            s.inline = "sudo /usr/local/bin/composer self-update && sudo chown -R vagrant:vagrant /home/vagrant/.composer/"
-            s.privileged = false
+            s.path = scriptDir + "/install-mongo.sh"
         end
 
-        # Configure Blackfire.io
-        if settings.has_key?("blackfire")
-            config.vm.provision "shell" do |s|
-                s.path = scriptDir + "/blackfire.sh"
-                s.args = [
-                    settings["blackfire"][0]["id"],
-                    settings["blackfire"][0]["token"],
-                    settings["blackfire"][0]["client-id"],
-                    settings["blackfire"][0]["client-token"]
-                ]
-            end
+        # Redis
+        config.vm.provision "shell" do |s|
+            s.path = scriptDir + "/install-redis.sh"
+        end
+
+        # Elastic
+        config.vm.provision "shell" do |s|
+            s.path = scriptDir + "/install-elastic.sh"
+        end
+
+        # Sass
+        config.vm.provision "shell" do |s|
+            s.path = scriptDir + "/install-sass.sh"
         end
     end
 end
