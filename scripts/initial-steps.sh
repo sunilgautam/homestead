@@ -9,8 +9,10 @@ apt-get install -y tree
 apt-get install -y git
 
 # set git config
-git config --global user.name "Sunil Gautam"
-git config --global user.email sunilgautam@kronosis.com
+git config --global user.name "Your Name"
+git config --global user.email email@domain.com
+git config --global core.editor "vim"
+git config --global core.autocrlf true
 
 # zsh
 apt-get install zsh -y
