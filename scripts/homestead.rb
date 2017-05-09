@@ -198,5 +198,10 @@ class Homestead
         config.vm.provision "shell" do |s|
             s.path = scriptDir + "/install-sass.sh"
         end
+
+        # Imagemagick
+        config.vm.provision "shell" do |s|
+            s.path = scriptDir + "/install-imagemagick.sh"
+        end
     end
 end
